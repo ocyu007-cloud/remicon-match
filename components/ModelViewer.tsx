@@ -56,20 +56,24 @@ const MESSAGE: Record<Exclude<State, 'loading' | 'ready'>, string> = {
   error: '3D 모델을 불러올 수 없어요. 잠시 뒤 다시 시도해 주세요.',
 };
 
-export default function ModelViewer({ height = 520 }: { height?: number }) {
+/** urn 을 주면 그 모델을, 안 주면 public/aps-model.json 에 적어 둔 기본 모델을 보여 준다 */
+export default function ModelViewer({ height = 520, urn: urnProp }: { height?: number; urn?: string }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<State>('loading');
 
   useEffect(() => {
     let viewer: any = null;
     let alive = true;
+    setState('loading');
 
     (async () => {
       try {
-        const meta = await fetch('/aps-model.json', { cache: 'no-store' })
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null);
-        const urn: string | undefined = meta?.urn;
+        const meta = urnProp
+          ? null
+          : await fetch('/aps-model.json', { cache: 'no-store' })
+              .then((r) => (r.ok ? r.json() : null))
+              .catch(() => null);
+        const urn: string | undefined = urnProp ?? meta?.urn;
         if (!urn) {
           if (alive) setState('no-model');
           return;
@@ -120,7 +124,7 @@ export default function ModelViewer({ height = 520 }: { height?: number }) {
         /* 이미 닫힘 */
       }
     };
-  }, []);
+  }, [urnProp]);
 
   return (
     <div
