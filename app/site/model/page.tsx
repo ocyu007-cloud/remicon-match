@@ -29,8 +29,8 @@ function putFile(url: string, file: File, onProgress: (pct: number) => void): Pr
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
     };
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error('upload')));
-    xhr.onerror = () => reject(new Error('upload'));
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`전송 응답 ${xhr.status}`)));
+    xhr.onerror = () => reject(new Error('전송 연결 실패'));
     xhr.send(file);
   });
 }
@@ -77,6 +77,7 @@ function ModelBody() {
     if (!/\.(rvt|ifc)$/i.test(file.name)) return fail('Revit(.rvt) 또는 .ifc 파일만 올릴 수 있어요.');
     if (file.size > MAX_MB * 1024 * 1024) return fail(`파일은 ${MAX_MB}MB 까지만 올릴 수 있어요.`);
 
+    let step = '올리기 시작';
     try {
       setPhase({ kind: 'uploading', pct: 0, name: file.name });
       const startRes = await fetch('/api/aps/upload/start', {
@@ -93,8 +94,10 @@ function ModelBody() {
         );
       }
 
+      step = '파일 전송';
       await putFile(start.url, file, (pct) => setPhase({ kind: 'uploading', pct, name: file.name }));
 
+      step = '변환 시작';
       const finRes = await fetch('/api/aps/upload/finish', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -105,8 +108,9 @@ function ModelBody() {
 
       setPhase({ kind: 'converting', progress: '', name: file.name });
       poll(fin.urn, file.name);
-    } catch {
-      fail('올리는 중에 끊겼어요. 인터넷을 확인하고 다시 시도해 주세요.');
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : '';
+      fail(`올리는 중에 끊겼어요 (${step} 단계${detail ? `: ${detail}` : ''}). 인터넷을 확인하고 다시 시도해 주세요.`);
     }
   }
 
