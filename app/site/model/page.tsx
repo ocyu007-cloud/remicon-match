@@ -10,8 +10,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import ModelViewer from '@/components/ModelViewer';
+import SpotTools from '@/components/SpotTools';
 import { SiteShell } from '@/components/RoleShells';
 import { Panel } from '@/components/ui';
+import { addSpot, loadSpots, parseSpotParams, type Spot } from '@/lib/spots';
 
 const MAX_MB = 150;
 
@@ -40,6 +42,28 @@ function ModelBody() {
   const [urn, setUrn] = useState<string | undefined>(undefined);
   const timer = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const [spots, setSpots] = useState<Spot[]>([]);
+  const [placing, setPlacing] = useState(false);
+  const [pendingPoint, setPendingPoint] = useState<{ x: number; y: number; z: number } | null>(null);
+  const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    const sync = () => setSpots(loadSpots());
+    // QR 로 들어왔으면 그 지점을 열어 둔다 (다른 기기에서 열어도 지점을 알 수 있게 주소에 담겨 있다)
+    const arrived = parseSpotParams(window.location.search);
+    if (arrived) {
+      addSpot(arrived);
+      setSelectedId(arrived.id);
+    }
+    sync();
+    window.addEventListener('remigo-spots', sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener('remigo-spots', sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
 
   useEffect(
     () => () => {
@@ -150,8 +174,34 @@ function ModelBody() {
       </Panel>
 
       <Panel title={urn ? '올린 모델' : '현장 모델'}>
-        <ModelViewer urn={urn} />
+        <ModelViewer
+          urn={urn}
+          spots={spots}
+          selectedId={selectedId}
+          placing={placing}
+          onPlace={(pt) => {
+            setPendingPoint(pt);
+            setPlacing(false);
+          }}
+          onPinClick={(id) => setSelectedId(id)}
+        />
       </Panel>
+
+      <SpotTools
+        spots={spots}
+        placing={placing}
+        onTogglePlacing={() => setPlacing((v) => !v)}
+        pending={pendingPoint != null}
+        onCancelPending={() => setPendingPoint(null)}
+        onConfirmPending={(name) => {
+          if (!pendingPoint) return;
+          const s = addSpot({ name, ...pendingPoint });
+          setPendingPoint(null);
+          setSelectedId(s.id);
+        }}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+      />
     </>
   );
 }
